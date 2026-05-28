@@ -3207,51 +3207,6 @@ local function SummonModernBone(startCF, scaleVec, isHoming, lifeTime, speed, da
 
 	local isStalker = (scaleVec.X >= 0.05)
 
-	-- 🌟 RECENT REQUEST: Dynamic blue bone sweep helper function for Phase 1 cinematics!
-	-- We define this globally or within scope so all cinematic attacks can call it cleanly.
-	if not _G.SpawnCinematicBlueBoneSweep then
-		_G.SpawnCinematicBlueBoneSweep = function(boxGroup, center, directionName, sweepDuration)
-			task.spawn(function()
-				local numBones = 16
-				local spacing = 56 / (numBones - 1)
-				local blueBones = {}
-				
-				for k = 0, numBones - 1 do
-					local xOffset = -28 + k * spacing
-					-- Create vertical cyan neon bones using SummonModernBone!
-					local startCF = CFrame.new(center) * CFrame.new(xOffset, -20, 0)
-					local b = SummonModernBone(startCF, Vector3.new(0.015, 0.05, 0.015), false, sweepDuration + 1, 0, nil, nil, true)
-					table.insert(blueBones, {part = b, xOffset = xOffset})
-				end
-				
-				CreateSound("340722848", Head, 4, 1.2) -- laser sound for entry
-				
-				local startTime = tick()
-				while tick() - startTime < sweepDuration do
-					if _G.CancelAttackTrigger or not boxGroup.Parent then break end
-					local sweepT = (tick() - startTime) / sweepDuration
-					local blueZ = -28 + 56 * sweepT
-					if directionName == "Back" then
-						blueZ = 28 - 56 * sweepT
-					end
-					
-					for _, bData in ipairs(blueBones) do
-						if bData.part and bData.part.Parent then
-							bData.part.CFrame = CFrame.new(center) * CFrame.new(bData.xOffset, 7.5, blueZ)
-						end
-					end
-					task.wait()
-				end
-				
-				for _, bData in ipairs(blueBones) do
-					if bData.part and bData.part.Parent then
-						bData.part:Destroy()
-					end
-				end
-			end)
-		end
-	end
-
 	task.spawn(function()
 		local active, hitCache = true, {}
 		local overlapParams = OverlapParams.new() overlapParams.FilterDescendantsInstances = {Character, Effects}
@@ -3435,6 +3390,49 @@ local function SummonModernBone(startCF, scaleVec, isHoming, lifeTime, speed, da
 		for i = 1, 10 do bone.Transparency = i/10 swait() end
 		bone:Destroy()
 	end)
+end
+
+-- 🌟 Blue bone sweep helper for cinematic attacks (defined at file scope, always available)
+if not _G.SpawnCinematicBlueBoneSweep then
+	_G.SpawnCinematicBlueBoneSweep = function(sweepCenter, directionName, sweepDuration)
+		task.spawn(function()
+			local numBones = 16
+			local spacing = 56 / (numBones - 1)
+			local blueBones = {}
+
+			for k = 0, numBones - 1 do
+				local xOffset = -28 + k * spacing
+				local startCF = CFrame.new(sweepCenter) * CFrame.new(xOffset, -20, 0)
+				local b = SummonModernBone(startCF, Vector3.new(0.015, 0.05, 0.015), false, sweepDuration + 1, 0, nil, nil, true)
+				table.insert(blueBones, {part = b, xOffset = xOffset})
+			end
+
+			CreateSound("340722848", Head, 4, 1.2)
+
+			local startTime = tick()
+			while tick() - startTime < sweepDuration do
+				if _G.CancelAttackTrigger then break end
+				local sweepT = (tick() - startTime) / sweepDuration
+				local blueZ = -28 + 56 * sweepT
+				if directionName == "Back" then
+					blueZ = 28 - 56 * sweepT
+				end
+
+				for _, bData in ipairs(blueBones) do
+					if bData.part and bData.part.Parent then
+						bData.part.CFrame = CFrame.new(sweepCenter) * CFrame.new(bData.xOffset, 7.5, blueZ)
+					end
+				end
+				task.wait()
+			end
+
+			for _, bData in ipairs(blueBones) do
+				if bData.part and bData.part.Parent then
+					bData.part:Destroy()
+				end
+			end
+		end)
+	end
 end
 
 WarnAndRise = function(centerPos, rotationY, width, depth, visualMode, speedMult, noKR, onlyFasterSpawn)
@@ -5382,9 +5380,6 @@ function Attack_FirstCinematic()
 	else
 		Expression.Texture = "rbxassetid://4484407199"
 		chatfunc("* let's get to the point.") task.wait(2)
-		if not isPhase2 then
-			themeMoos:Play()
-		end
 		-- Also cancel if nobody is in the box on repeated runs
 		if not GetClosestTarget(center, 70) then
 			chatfunc("* huh. guess not.")
@@ -5430,12 +5425,12 @@ function Attack_FirstCinematic()
 	-- Sweeps from Back to Front starting at 8 seconds, lasting 4 seconds.
 	task.delay(2, function()
 		if phase1Active and _G.SpawnCinematicBlueBoneSweep then
-			_G.SpawnCinematicBlueBoneSweep(boxGroup, center, "Front", 4.0)
+			_G.SpawnCinematicBlueBoneSweep(center, "Front", 4.0)
 		end
 	end)
 	task.delay(8, function()
 		if phase1Active and _G.SpawnCinematicBlueBoneSweep then
-			_G.SpawnCinematicBlueBoneSweep(boxGroup, center, "Back", 4.0)
+			_G.SpawnCinematicBlueBoneSweep(center, "Back", 4.0)
 		end
 	end)
 
@@ -5534,9 +5529,6 @@ function Attack_FirstCinematic()
 		chatfunc("* looks like we're done here.")
 		task.wait(2)
 		Humanoid.WalkSpeed = 16
-		if not isPhase2 then
-			themeMoos:Play()
-		end
 		boxGroup:Destroy()
 		attack = false
 		return
@@ -5727,9 +5719,6 @@ function Attack_FirstCinematic()
 	-- the giant-bone variant and the moving-platform variant, so we force the moving one.
 	-- Tear down the cinematic arena first so it doesn't overlap the platform arena.
 	Humanoid.WalkSpeed = 16
-	if not isPhase2 then
-		themeMoos:Play()
-	end
 	boxGroup:Destroy()
 
 	_G.ForceBoneZoneVariant = "platform"
@@ -6679,6 +6668,7 @@ function Attack_BoneZone(useVariant)
 			giantBone:Destroy()
 			for _, p in pairs(plats) do p:Destroy() end
 			rootPart.Anchored = originalAnchored
+			attack = false
 		else
 			-- ✨ NEW: 3D Platform Sliding Attack (Moving Obby)
 			-- Auto-cancel immediately if no player is nearby
@@ -8504,7 +8494,7 @@ function Attack_FinalCinematic()
 			sweepCount = sweepCount + 1
 			local dir = (sweepCount % 2 == 1) and "Front" or "Back"
 			if _G.SpawnCinematicBlueBoneSweep then
-				_G.SpawnCinematicBlueBoneSweep(boxGroup, center, dir, 5.0)
+				_G.SpawnCinematicBlueBoneSweep(center, dir, 5.0)
 			end
 			task.wait(6.0)
 		end
@@ -8760,12 +8750,12 @@ function Attack_TrueFinalCinematic()
 	-- Sweeps from Back to Front starting at 6 seconds, lasting 4 seconds.
 	task.delay(2, function()
 		if p1Active and _G.SpawnCinematicBlueBoneSweep then
-			_G.SpawnCinematicBlueBoneSweep(boxGroup, center, "Front", 3.2)
+			_G.SpawnCinematicBlueBoneSweep(center, "Front", 3.2)
 		end
 	end)
 	task.delay(6, function()
 		if p1Active and _G.SpawnCinematicBlueBoneSweep then
-			_G.SpawnCinematicBlueBoneSweep(boxGroup, center, "Back", 3.2)
+			_G.SpawnCinematicBlueBoneSweep(center, "Back", 3.2)
 		end
 	end)
 
@@ -8943,12 +8933,12 @@ function Attack_TrueFinalCinematic()
 	-- Blue bone wall sweeps during Stage 2
 	task.delay(3, function()
 		if p2Active and _G.SpawnCinematicBlueBoneSweep then
-			_G.SpawnCinematicBlueBoneSweep(boxGroup, center, "Front", 3.2)
+			_G.SpawnCinematicBlueBoneSweep(center, "Front", 3.2)
 		end
 	end)
 	task.delay(8, function()
 		if p2Active and _G.SpawnCinematicBlueBoneSweep then
-			_G.SpawnCinematicBlueBoneSweep(boxGroup, center, "Back", 3.2)
+			_G.SpawnCinematicBlueBoneSweep(center, "Back", 3.2)
 		end
 	end)
 
@@ -9017,7 +9007,7 @@ function Attack_TrueFinalCinematic()
 			sweepCount = sweepCount + 1
 			local dir = (sweepCount % 2 == 1) and "Front" or "Back"
 			if _G.SpawnCinematicBlueBoneSweep then
-				_G.SpawnCinematicBlueBoneSweep(boxGroup, center, dir, 3.2)
+				_G.SpawnCinematicBlueBoneSweep(center, dir, 3.2)
 			end
 			task.wait(4.5)
 		end
@@ -9635,12 +9625,12 @@ function Attack_TrueFinalCinematic()
 	-- Blue bone wall sweeps during Stage 8
 	task.delay(2, function()
 		if showerActive and _G.SpawnCinematicBlueBoneSweep then
-			_G.SpawnCinematicBlueBoneSweep(boxGroup, center, "Front", 3.2)
+			_G.SpawnCinematicBlueBoneSweep(center, "Front", 3.2)
 		end
 	end)
 	task.delay(8, function()
 		if showerActive and _G.SpawnCinematicBlueBoneSweep then
-			_G.SpawnCinematicBlueBoneSweep(boxGroup, center, "Back", 3.2)
+			_G.SpawnCinematicBlueBoneSweep(center, "Back", 3.2)
 		end
 	end)
 
@@ -9791,17 +9781,17 @@ function Attack_TrueFinalCinematic()
 	-- Blue bone wall sweeps during Stage 11
 	task.delay(3, function()
 		if s11Active and _G.SpawnCinematicBlueBoneSweep then
-			_G.SpawnCinematicBlueBoneSweep(boxGroup, center, "Front", 3.2)
+			_G.SpawnCinematicBlueBoneSweep(center, "Front", 3.2)
 		end
 	end)
 	task.delay(10, function()
 		if s11Active and _G.SpawnCinematicBlueBoneSweep then
-			_G.SpawnCinematicBlueBoneSweep(boxGroup, center, "Back", 3.2)
+			_G.SpawnCinematicBlueBoneSweep(center, "Back", 3.2)
 		end
 	end)
 	task.delay(16, function()
 		if s11Active and _G.SpawnCinematicBlueBoneSweep then
-			_G.SpawnCinematicBlueBoneSweep(boxGroup, center, "Front", 3.2)
+			_G.SpawnCinematicBlueBoneSweep(center, "Front", 3.2)
 		end
 	end)
 
